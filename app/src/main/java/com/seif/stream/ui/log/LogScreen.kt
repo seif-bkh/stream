@@ -118,7 +118,7 @@ fun LogScreen(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = if (contentQuery.isBlank()) "NO ENTRIES YET" else "NO MATCHES",
+                        text = if (entries.isEmpty()) "NO ENTRIES YET" else "NO MATCHES",
                         color = Muted,
                         fontFamily = FontFamily.Monospace,
                         fontSize = 12.sp,
@@ -328,10 +328,6 @@ private fun EntryRow(entry: Entry) {
             color = Ink,
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
-        )
-    }
-}
-fier = Modifier.weight(1f),
         )
     }
 }

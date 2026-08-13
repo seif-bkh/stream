@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.seif.stream.data.CapturePersistence
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -87,9 +88,11 @@ class CaptureViewModel(
         draftJob?.cancel()
         draftJob = viewModelScope.launch {
             delay(DRAFT_DEBOUNCE_MILLIS)
-            runCatching {
+            try {
                 repository.writeDraft(next.text, timestamp)
-            }.onFailure {
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Throwable) {
                 markNotSavedIfCurrent(snapshotRevision)
             }
         }
@@ -107,9 +110,8 @@ class CaptureViewModel(
             draftJob?.join()
             if (revision != snapshotRevision) return@launch
 
-            runCatching {
+            try {
                 repository.commitCapture(snapshot.text, timestamp)
-            }.onSuccess {
                 if (revision == snapshotRevision) {
                     _state.value = _state.value.copy(
                         saveStatus = CaptureSaveStatus.Saved,
@@ -117,7 +119,9 @@ class CaptureViewModel(
                         dirty = false,
                     )
                 }
-            }.onFailure {
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Throwable) {
                 markNotSavedIfCurrent(snapshotRevision)
             }
         }
