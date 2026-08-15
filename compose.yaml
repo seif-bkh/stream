@@ -1,0 +1,41 @@
+name: stream-android
+
+x-android-service: &android-service
+  image: stream-android-dev:local
+  platform: linux/amd64
+  build:
+    context: .
+    dockerfile: Dockerfile.dev
+  working_dir: /workspace
+  environment:
+    HOME: /home/android
+    ANDROID_HOME: /opt/android-sdk
+    ANDROID_SDK_ROOT: /opt/android-sdk
+    ANDROID_USER_HOME: /home/android/.android
+    GRADLE_USER_HOME: /home/android/.gradle
+  volumes:
+    - type: bind
+      source: .
+      target: /workspace
+    - type: volume
+      source: gradle-cache
+      target: /home/android/.gradle
+    - type: volume
+      source: android-user
+      target: /home/android/.android
+
+services:
+  android-dev:
+    <<: *android-service
+    command: ["sleep", "infinity"]
+    stdin_open: true
+    tty: true
+
+  android-check:
+    <<: *android-service
+    profiles: ["check"]
+    command: ["./build-and-test.sh", "--linux-only"]
+
+volumes:
+  gradle-cache:
+  android-user:
