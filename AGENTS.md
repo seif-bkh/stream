@@ -32,7 +32,7 @@ Do not pick an interpretation silently. One clarifying question beats a wrong im
 - Never add a splash screen, onboarding, or a home screen. Launcher activity is Capture.
 - Never write to the DB on a keystroke.
 - Never stamp the timestamp at app open.
-- Never delete user text or drafts unless a real save just committed them.
+- Never delete drafts unless a real save just committed them. Stored entries may only leave the Log through the confirmed recoverable Trash flow; permanent deletion is only available from Trash with a second confirmation.
 
 ## Always do these
 - Capture opens with focus in the field and keyboard shown, every time (launch, widget/shortcut, FAB).
@@ -40,8 +40,10 @@ Do not pick an interpretation silently. One clarifying question beats a wrong im
 - Text change → debounce 250–300ms → write raw string to `filesDir/draft_buffer.txt` + save first-keystroke millis to prefs. Nothing else.
 - 2s idle **or** `onStop()` → commit draft to DB with the stamped timestamp → update `last_real_save_timestamp` → delete draft file + pref.
 - On every launch: if draft file is non-empty and its time > `last_real_save_timestamp`, restore text + original timestamp and show "recovered unsaved text". Otherwise delete the draft.
-- Swipe left = Capture → Log. Swipe right = Log → Capture. Never invert.
-- Import merges; skip any entry whose timestamp already exists.
+- Swipe right = Capture → Log. Swipe left = Log → Capture. Never invert.
+- Opening a Log entry edits that same entry; keep its original first-keystroke timestamp through every later save.
+- Moving an active entry to Trash requires confirmation, remains recoverable, and resets Capture if that entry was open.
+- Import merges; skip any entry whose timestamp already exists, including entries already in Trash.
 
 ## Style rules (apply to any UI you touch)
 - Background `#F5F2EB`, text `#181818`, muted `#6B6560`, accent `#C17A2E`.
@@ -51,9 +53,11 @@ Do not pick an interpretation silently. One clarifying question beats a wrong im
 
 ## Log screen invariants
 - Reverse chronological, grouped by `Today` / `Yesterday` / `Mon Aug 12`.
-- Row = monospace `HH:MM` + entry text. Nothing else.
+- Row = monospace `HH:MM` + entry text + a trash icon. Tapping the row opens it for editing with its original timestamp.
+- The trash icon opens a `Move to trash` / `Cancel` confirmation; it never deletes immediately.
 - Search has two modes: substring filter, and jump-to-date that **scrolls to the divider** (not filters).
-- FAB bottom-right opens a fresh empty Capture. Settings button top corner.
+- FAB bottom-right opens a fresh empty Capture. Trash and Settings buttons stay in the top corner.
+- Trash is minimal: restore directly, or permanently delete only after confirmation.
 
 ## Settings screen invariants
 - Exactly two actions: Export, Import. Add nothing else.
@@ -67,5 +71,7 @@ Do not pick an interpretation silently. One clarifying question beats a wrong im
 - [ ] Draft write is still cheap (raw string, no parsing)
 - [ ] Real save still fires on 2s idle **and** `onStop()`
 - [ ] Recovery path still works if the app is killed mid-typing
-- [ ] Swipe directions unchanged
+- [ ] Swipe right still opens Log and swipe left still returns to Capture
+- [ ] Reopened entries still save with their original timestamp
+- [ ] Trash remains recoverable until an explicit permanent-delete confirmation
 - [ ] Project builds

@@ -2,6 +2,7 @@ package com.seif.stream.ui.capture
 
 import com.seif.stream.MainDispatcherRule
 import com.seif.stream.data.CapturePersistence
+import com.seif.stream.data.Entry
 import com.seif.stream.data.RecoveredDraft
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
@@ -95,6 +96,38 @@ class CaptureViewModelTest {
         assertTrue(viewModel.startFresh())
 
         assertEquals(listOf("Keep this safe" to 321L), persistence.commits)
+        assertEquals("", viewModel.state.value.text)
+        assertEquals(null, viewModel.state.value.timestamp)
+    }
+
+    @Test
+    fun openingAndEditingExistingEntryKeepsItsOriginalTimestamp() = runTest {
+        val persistence = FakeCapturePersistence()
+        val viewModel = CaptureViewModel(persistence) { 9_999L }
+        val original = Entry(timestamp = 50L, text = "Original", updatedAt = 60L)
+
+        assertTrue(viewModel.openEntry(original))
+        assertEquals(50L, viewModel.state.value.timestamp)
+        assertEquals("Original", viewModel.state.value.text)
+
+        viewModel.onTextChanged("Edited")
+        runCurrent()
+        advanceTimeBy(2_000L)
+        runCurrent()
+
+        assertEquals("Edited" to 50L, persistence.commits.single())
+        assertEquals(50L, viewModel.state.value.timestamp)
+    }
+
+    @Test
+    fun trashingActiveEntryCommitsLatestTextThenResetsCapture() = runTest {
+        val persistence = FakeCapturePersistence()
+        val viewModel = CaptureViewModel(persistence) { 75L }
+        viewModel.onTextChanged("Latest text")
+
+        assertTrue(viewModel.prepareEntryForTrash(75L))
+
+        assertEquals(listOf("Latest text" to 75L), persistence.commits)
         assertEquals("", viewModel.state.value.text)
         assertEquals(null, viewModel.state.value.timestamp)
     }

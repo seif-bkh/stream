@@ -13,7 +13,8 @@ class StreamRepository(
 ) : CapturePersistence {
     private val persistenceMutex = Mutex()
 
-    val entries: Flow<List<Entry>> = entryDao.observeAll()
+    val entries: Flow<List<Entry>> = entryDao.observeActive()
+    val trashedEntries: Flow<List<Entry>> = entryDao.observeTrashed()
 
     override fun recoverDraft(): RecoveredDraft? =
         draftStore.recoverIfNewerThanLastSave(nowMillis())
@@ -36,9 +37,28 @@ class StreamRepository(
                     timestamp = timestamp,
                     text = text,
                     updatedAt = nowMillis(),
+                    trashedAt = null,
                 ),
             )
             draftStore.completeRealSave(nowMillis())
+        }
+    }
+
+    suspend fun moveToTrash(timestamp: Long): Boolean = withContext(Dispatchers.IO) {
+        persistenceMutex.withLock {
+            entryDao.moveToTrash(timestamp, nowMillis()) > 0
+        }
+    }
+
+    suspend fun restoreFromTrash(timestamp: Long): Boolean = withContext(Dispatchers.IO) {
+        persistenceMutex.withLock {
+            entryDao.restoreFromTrash(timestamp) > 0
+        }
+    }
+
+    suspend fun deletePermanently(timestamp: Long): Boolean = withContext(Dispatchers.IO) {
+        persistenceMutex.withLock {
+            entryDao.deletePermanently(timestamp) > 0
         }
     }
 

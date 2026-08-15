@@ -64,12 +64,16 @@ private enum class SearchMode {
 fun LogScreen(
     entries: List<Entry>,
     onFreshCapture: () -> Unit,
+    onOpenEntry: (Entry) -> Unit,
+    onMoveToTrash: (Entry) -> Unit,
+    onOpenTrash: () -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var searchMode by rememberSaveable { mutableStateOf(SearchMode.Content) }
     var contentQuery by rememberSaveable { mutableStateOf("") }
     var dateQuery by rememberSaveable { mutableStateOf("") }
+    var pendingTrash by remember { mutableStateOf<Entry?>(null) }
     val listState = rememberLazyListState()
     val today = LocalDate.now()
     val listItems = remember(entries, contentQuery, searchMode, today) {
@@ -88,6 +92,19 @@ fun LogScreen(
         }
     }
 
+    pendingTrash?.let { entry ->
+        EntryConfirmationDialog(
+            title = "Move to trash?",
+            message = "This entry will leave the Log. You can restore it from Trash.",
+            confirmLabel = "Move to trash",
+            onConfirm = {
+                pendingTrash = null
+                onMoveToTrash(entry)
+            },
+            onDismiss = { pendingTrash = null },
+        )
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -95,7 +112,10 @@ fun LogScreen(
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
         Column(Modifier.fillMaxSize()) {
-            LogHeader(onOpenSettings = onOpenSettings)
+            LogHeader(
+                onOpenTrash = onOpenTrash,
+                onOpenSettings = onOpenSettings,
+            )
             SearchControls(
                 mode = searchMode,
                 onModeChange = { searchMode = it },
@@ -132,7 +152,7 @@ fun LogScreen(
                     contentPadding = PaddingValues(
                         start = 22.dp,
                         top = 12.dp,
-                        end = 22.dp,
+                        end = 12.dp,
                         bottom = 104.dp,
                     ),
                 ) {
@@ -147,7 +167,11 @@ fun LogScreen(
                     ) { item ->
                         when (item) {
                             is LogListItem.DayDivider -> DayDivider(item.label)
-                            is LogListItem.EntryRow -> EntryRow(item.entry)
+                            is LogListItem.EntryRow -> EntryRow(
+                                entry = item.entry,
+                                onOpen = { onOpenEntry(item.entry) },
+                                onTrash = { pendingTrash = item.entry },
+                            )
                         }
                     }
                 }
@@ -181,12 +205,15 @@ fun LogScreen(
 }
 
 @Composable
-private fun LogHeader(onOpenSettings: () -> Unit) {
+private fun LogHeader(
+    onOpenTrash: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(58.dp)
-            .padding(start = 22.dp, end = 10.dp),
+            .padding(start = 22.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -198,6 +225,13 @@ private fun LogHeader(onOpenSettings: () -> Unit) {
             letterSpacing = 1.5.sp,
             modifier = Modifier.weight(1f),
         )
+        IconButton(onClick = onOpenTrash) {
+            Icon(
+                painter = painterResource(R.drawable.ic_trash),
+                contentDescription = "Open trash",
+                tint = Ink,
+            )
+        }
         IconButton(onClick = onOpenSettings) {
             Icon(
                 painter = painterResource(R.drawable.ic_settings),
@@ -309,11 +343,16 @@ private fun DayDivider(label: String) {
 }
 
 @Composable
-private fun EntryRow(entry: Entry) {
+private fun EntryRow(
+    entry: Entry,
+    onOpen: () -> Unit,
+    onTrash: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 9.dp),
+            .clickable(onClick = onOpen)
+            .padding(vertical = 5.dp),
         verticalAlignment = Alignment.Top,
     ) {
         Text(
@@ -321,13 +360,28 @@ private fun EntryRow(entry: Entry) {
             color = Muted,
             fontFamily = FontFamily.Monospace,
             fontSize = 12.sp,
-            modifier = Modifier.width(55.dp),
+            modifier = Modifier
+                .width(55.dp)
+                .padding(top = 8.dp),
         )
         Text(
             text = entry.text,
             color = Ink,
             style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .padding(top = 5.dp, bottom = 5.dp),
         )
+        IconButton(
+            onClick = onTrash,
+            modifier = Modifier.size(40.dp),
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_trash),
+                contentDescription = "Move entry to trash",
+                tint = Muted,
+                modifier = Modifier.size(18.dp),
+            )
+        }
     }
 }

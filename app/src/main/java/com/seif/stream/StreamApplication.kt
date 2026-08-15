@@ -12,7 +12,9 @@ class StreamApplication : Application() {
             applicationContext,
             StreamDatabase::class.java,
             "stream_entries.db",
-        ).build()
+        )
+            .addMigrations(StreamDatabase.MIGRATION_1_2)
+            .build()
     }
 
     val repository: StreamRepository by lazy {

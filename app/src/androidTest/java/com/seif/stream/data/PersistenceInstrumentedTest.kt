@@ -1,8 +1,10 @@
 package com.seif.stream.data
 
+import android.database.sqlite.SQLiteDatabase
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -16,10 +18,12 @@ import org.junit.runner.RunWith
 class PersistenceInstrumentedTest {
     private val context = ApplicationProvider.getApplicationContext<android.content.Context>()
     private var database: StreamDatabase? = null
+    private var databaseNameToDelete: String? = null
 
     @After
     fun tearDown() {
         database?.close()
+        databaseNameToDelete?.let(context::deleteDatabase)
     }
 
     @Test
@@ -42,7 +46,12 @@ class PersistenceInstrumentedTest {
     fun importSkipsAnExistingTimestampAndMergesTheRest() = runBlocking {
         val db = Room.inMemoryDatabaseBuilder(context, StreamDatabase::class.java).build()
         database = db
-        val existing = Entry(timestamp = 100L, text = "Original", updatedAt = 100L)
+        val existing = Entry(
+            timestamp = 100L,
+            text = "Original",
+            updatedAt = 100L,
+            trashedAt = 150L,
+        )
         db.entryDao().upsert(existing)
         val repository = StreamRepository(
             entryDao = db.entryDao(),
@@ -63,7 +72,94 @@ class PersistenceInstrumentedTest {
         assertEquals(1, imported)
         assertEquals(2, all.size)
         assertEquals("Imported", all.first { it.timestamp == 200L }.text)
-        assertEquals("Original", all.first { it.timestamp == 100L }.text)
+        val unchangedExisting = all.first { it.timestamp == 100L }
+        assertEquals("Original", unchangedExisting.text)
+        assertEquals(150L, unchangedExisting.trashedAt)
         assertTrue(all.zipWithNext().all { (first, second) -> first.timestamp > second.timestamp })
+    }
+
+    @Test
+    fun trashCanBeRestoredAndThenPermanentlyDeleted() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(context, StreamDatabase::class.java).build()
+        database = db
+        val repository = StreamRepository(
+            entryDao = db.entryDao(),
+            draftStore = DraftStore(context),
+            nowMillis = { 500L },
+        )
+        val entry = Entry(timestamp = 100L, text = "Keep until confirmed", updatedAt = 100L)
+        db.entryDao().upsert(entry)
+
+        assertTrue(repository.moveToTrash(entry.timestamp))
+        assertTrue(repository.entries.first().isEmpty())
+        assertEquals(entry.timestamp, repository.trashedEntries.first().single().timestamp)
+
+        assertTrue(repository.restoreFromTrash(entry.timestamp))
+        assertEquals(entry.timestamp, repository.entries.first().single().timestamp)
+        assertTrue(repository.trashedEntries.first().isEmpty())
+
+        assertTrue(repository.moveToTrash(entry.timestamp))
+        assertTrue(repository.deletePermanently(entry.timestamp))
+        assertTrue(db.entryDao().getAll().isEmpty())
+    }
+
+    @Test
+    fun migrationFromVersionOneKeepsExistingEntriesActive() = runBlocking {
+        val databaseName = "stream-migration-${System.nanoTime()}.db"
+        databaseNameToDelete = databaseName
+        val databaseFile = context.getDatabasePath(databaseName)
+        databaseFile.parentFile?.mkdirs()
+        SQLiteDatabase.openOrCreateDatabase(databaseFile, null).use { legacyDatabase ->
+            legacyDatabase.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS entries (
+                    timestamp INTEGER NOT NULL,
+                    text TEXT NOT NULL,
+                    updatedAt INTEGER NOT NULL,
+                    PRIMARY KEY(timestamp)
+                )
+                """.trimIndent(),
+            )
+            legacyDatabase.execSQL(
+                "INSERT INTO entries(timestamp, text, updatedAt) VALUES(100, 'Existing', 100)",
+            )
+            legacyDatabase.version = 1
+        }
+
+        val migrated = Room.databaseBuilder(context, StreamDatabase::class.java, databaseName)
+            .addMigrations(StreamDatabase.MIGRATION_1_2)
+            .build()
+        database = migrated
+
+        val entry = migrated.entryDao().getAll().single()
+        assertEquals("Existing", entry.text)
+        assertNull(entry.trashedAt)
+    }
+
+    @Test
+    fun versionTwoExportPreservesTrashAndVersionOneStillImports() {
+        val trashed = Entry(
+            timestamp = 100L,
+            text = "Recoverable",
+            updatedAt = 200L,
+            trashedAt = 300L,
+        )
+
+        val decodedV2 = EntryJsonCodec.decode(
+            EntryJsonCodec.encode(listOf(trashed), exportedAtMillis = 400L),
+            importedAtMillis = 500L,
+        ).single()
+        assertEquals(300L, decodedV2.trashedAt)
+
+        val legacyV1 = """
+            {
+              "format": "stream",
+              "version": 1,
+              "entries": [{"timestamp": 600, "text": "Legacy"}]
+            }
+        """.trimIndent()
+        val decodedV1 = EntryJsonCodec.decode(legacyV1, importedAtMillis = 700L).single()
+        assertEquals("Legacy", decodedV1.text)
+        assertNull(decodedV1.trashedAt)
     }
 }

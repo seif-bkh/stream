@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.seif.stream.data.CapturePersistence
+import com.seif.stream.data.Entry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -165,21 +166,61 @@ class CaptureViewModel(
     /** Saves the current entry before replacing it with the fresh Capture requested by the FAB. */
     suspend fun startFresh(): Boolean {
         val snapshot = _state.value
+        if (!prepareToReplace(snapshot)) return false
+
+        _state.value = CaptureUiState(sessionId = snapshot.sessionId + 1L)
+        return true
+    }
+
+    /** Opens an existing entry without ever replacing its original first-keystroke timestamp. */
+    suspend fun openEntry(entry: Entry): Boolean {
+        require(entry.trashedAt == null) { "A trashed entry cannot be opened for editing" }
+        val snapshot = _state.value
+
+        if (snapshot.timestamp == entry.timestamp) {
+            // Keep newer in-memory text if the user returns before its debounce has completed.
+            _state.value = snapshot.copy(sessionId = snapshot.sessionId + 1L)
+            return true
+        }
+
+        if (!prepareToReplace(snapshot)) return false
+        _state.value = CaptureUiState(
+            text = entry.text,
+            timestamp = entry.timestamp,
+            saveStatus = CaptureSaveStatus.Saved,
+            sessionId = snapshot.sessionId + 1L,
+        )
+        return true
+    }
+
+    /**
+     * Saves the latest visible revision, then clears Capture before the repository moves this
+     * timestamp to Trash. Clearing first prevents a later lifecycle flush from recreating it.
+     */
+    suspend fun prepareEntryForTrash(timestamp: Long): Boolean {
+        val snapshot = _state.value
+        if (snapshot.timestamp != timestamp) return true
+        if (!prepareToReplace(snapshot)) return false
+
+        _state.value = CaptureUiState(sessionId = snapshot.sessionId + 1L)
+        return true
+    }
+
+    private suspend fun prepareToReplace(snapshot: CaptureUiState): Boolean {
         revision += 1L
         draftJob?.cancel()
         realSaveJob?.cancel()
 
         if (snapshot.dirty && snapshot.timestamp != null) {
-            val saveResult = runCatching {
+            try {
                 repository.commitCapture(snapshot.text, snapshot.timestamp)
-            }
-            if (saveResult.isFailure) {
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Throwable) {
                 _state.value = snapshot.copy(saveStatus = CaptureSaveStatus.NotSaved)
                 return false
             }
         }
-
-        _state.value = CaptureUiState(sessionId = snapshot.sessionId + 1L)
         return true
     }
 

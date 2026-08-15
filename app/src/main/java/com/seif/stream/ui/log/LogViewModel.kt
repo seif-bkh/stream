@@ -9,12 +9,29 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 
-class LogViewModel(repository: StreamRepository) : ViewModel() {
+class LogViewModel(
+    private val repository: StreamRepository,
+) : ViewModel() {
     val entries: StateFlow<List<Entry>> = repository.entries.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000L),
         initialValue = emptyList(),
     )
+
+    val trashedEntries: StateFlow<List<Entry>> = repository.trashedEntries.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000L),
+        initialValue = emptyList(),
+    )
+
+    suspend fun moveToTrash(entry: Entry): Boolean =
+        repository.moveToTrash(entry.timestamp)
+
+    suspend fun restore(entry: Entry): Boolean =
+        repository.restoreFromTrash(entry.timestamp)
+
+    suspend fun deletePermanently(entry: Entry): Boolean =
+        repository.deletePermanently(entry.timestamp)
 
     class Factory(
         private val repository: StreamRepository,

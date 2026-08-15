@@ -405,9 +405,11 @@ Manual phone checks:
   1. Confirm Capture opens immediately with a cursor and keyboard.
   2. Type a thought; confirm the timestamp appears on the first keystroke.
   3. Stop typing for two seconds; confirm the status changes to "saved".
-  4. Swipe left to Log, verify the entry, search it, then swipe right.
-  5. Long-press the launcher icon and try the Capture shortcut.
-  6. Open Settings and test export/import with a disposable export file.
+  4. Swipe right to Log, verify/search the entry, then swipe left to Capture.
+  5. Tap the entry, edit it, and confirm its original timestamp stays fixed.
+  6. Move an entry to Trash, restore it, and verify permanent delete confirmation.
+  7. Long-press the launcher icon and try the Capture shortcut.
+  8. Open Settings and test export/import with a disposable export file.
 
 Connected instrumentation is intentionally not run on this phone because the
 current persistence test uses target-app storage. CI still compiles that test

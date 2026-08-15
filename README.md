@@ -9,9 +9,11 @@ Stream is a frictionless Android brain-dump: launch, type, and leave. Capture is
 - Writes raw text to `filesDir/draft_buffer.txt` after a 275 ms debounce.
 - Upserts the entry into Room after 2 seconds idle and synchronously at `onStop()`, then removes the committed draft.
 - Restores a newer non-empty draft on process restart and labels it `recovered unsaved text`.
-- Swipes left to a reverse-chronological, day-grouped Log and right to Capture.
+- Swipes right to a reverse-chronological, day-grouped Log and left to Capture.
+- Reopens entries for editing without changing their original creation timestamp.
+- Moves entries into recoverable Trash, with confirmed permanent deletion only from Trash.
 - Searches by content or jumps to an ISO date (`YYYY-MM-DD`).
-- Exports and merges timestamp-deduplicated JSON through Android's document picker.
+- Exports and merges timestamp-deduplicated JSON, including Trash state, through Android's document picker.
 - Provides a static **Capture** launcher shortcut (long-press the app icon).
 
 There is no service, worker, alarm, save button, splash activity, title, tag, or folder system.
@@ -94,12 +96,17 @@ Exports are UTF-8 JSON documents with a format/version marker and an array of ti
 ```json
 {
   "format": "stream",
-  "version": 1,
+  "version": 2,
   "exportedAt": "2026-08-13T14:32:07Z",
   "entries": [
-    { "timestamp": 1786631527000, "text": "A captured thought" }
+    { "timestamp": 1786631527000, "text": "An active thought" },
+    {
+      "timestamp": 1786631427000,
+      "text": "A recoverable thought",
+      "trashedAt": 1786631627000
+    }
   ]
 }
 ```
 
-Import uses the timestamp as the identity and leaves an existing entry unchanged when the same timestamp appears in a file.
+Import accepts Stream JSON versions 1 and 2. It uses the timestamp as the identity, preserves version 2 Trash state, and leaves an existing active or trashed entry unchanged when the same timestamp appears in a file.
