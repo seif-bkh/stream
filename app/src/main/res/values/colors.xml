@@ -4,5 +4,7 @@
     <color name="ink">#181818</color>
     <color name="muted">#6B6560</color>
     <color name="accent">#C17A2E</color>
+    <color name="logo_mark">#B4541A</color>
+    <color name="logo_background">#F5F0EA</color>
     <color name="transparent">#00000000</color>
 </resources>
