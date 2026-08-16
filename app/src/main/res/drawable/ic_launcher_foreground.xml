@@ -1,0 +1,16 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <!-- Scale the official 512-unit canvas into Android's central 72dp icon mask. -->
+    <group
+        android:pivotX="256"
+        android:pivotY="256"
+        android:scaleX="0.666667"
+        android:scaleY="0.666667">
+        <path
+            android:fillColor="@color/logo_mark"
+            android:pathData="M142,336.5 C350.32,336.5 181.68,112.5 390,112.5 A9.5,9.5 0,0 1,390,131.5 C181.68,131.5 350.32,403.5 142,403.5 A33.5,33.5 0,0 1,142,336.5 Z" />
+    </group>
+</vector>

@@ -1,0 +1,81 @@
+# syntax=docker/dockerfile:1.7
+
+ARG JAVA_IMAGE=eclipse-temurin:17-jdk-jammy
+FROM ${JAVA_IMAGE}
+
+LABEL org.opencontainers.image.title="Stream Android development environment" \
+      org.opencontainers.image.description="JDK 17 and Android SDK 35 toolchain for Stream"
+
+ARG ANDROID_CMDLINE_TOOLS_VERSION=11076708
+ARG ANDROID_CMDLINE_TOOLS_SHA256=2d2d50857e4eb553af5a6dc3ad507a17adf43d115264b1afc116f95c92e5e258
+ARG ANDROID_PLATFORM=35
+ARG ANDROID_BUILD_TOOLS=35.0.0
+ARG DEBIAN_FRONTEND=noninteractive
+
+ENV ANDROID_HOME=/opt/android-sdk \
+    ANDROID_SDK_ROOT=/opt/android-sdk
+
+ENV PATH="${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${PATH}"
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        bash \
+        ca-certificates \
+        curl \
+        git \
+        openssh-client \
+        procps \
+        unzip \
+        util-linux \
+        zip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p "${ANDROID_HOME}/cmdline-tools" /tmp/android-command-line-tools \
+    && curl --fail --location --show-error --silent \
+        --retry 5 --retry-all-errors --connect-timeout 20 \
+        "https://dl.google.com/android/repository/commandlinetools-linux-${ANDROID_CMDLINE_TOOLS_VERSION}_latest.zip" \
+        --output /tmp/android-command-line-tools.zip \
+    && echo "${ANDROID_CMDLINE_TOOLS_SHA256}  /tmp/android-command-line-tools.zip" | sha256sum --check --strict \
+    && unzip -q /tmp/android-command-line-tools.zip -d /tmp/android-command-line-tools \
+    && mv /tmp/android-command-line-tools/cmdline-tools "${ANDROID_HOME}/cmdline-tools/latest" \
+    && rm -rf /tmp/android-command-line-tools /tmp/android-command-line-tools.zip \
+    && sdkmanager --version
+
+# Building this image constitutes acceptance of the Android SDK licenses needed
+# for the explicitly installed development packages below.
+RUN mkdir -p /root/.android \
+    && touch /root/.android/repositories.cfg \
+    && (yes | sdkmanager --sdk_root="${ANDROID_HOME}" --licenses >/dev/null 2>&1 || true) \
+    && sdkmanager --sdk_root="${ANDROID_HOME}" --install \
+        "platform-tools" \
+        "platforms;android-${ANDROID_PLATFORM}" \
+        "build-tools;${ANDROID_BUILD_TOOLS}" \
+    && test -f "${ANDROID_HOME}/platforms/android-${ANDROID_PLATFORM}/android.jar" \
+    && test -x "${ANDROID_HOME}/build-tools/${ANDROID_BUILD_TOOLS}/aapt2" \
+    && rm -rf /root/.android "${ANDROID_HOME}/.temp"
+
+ENV ANDROID_USER_HOME=/home/android/.android \
+    GRADLE_USER_HOME=/home/android/.gradle \
+    HOME=/home/android
+
+RUN groupadd --gid 1000 android \
+    && useradd --uid 1000 --gid android --create-home --shell /bin/bash android \
+    && mkdir -p "${GRADLE_USER_HOME}" "${ANDROID_USER_HOME}" \
+    && chown -R android:android /home/android
+
+# Seed the image (and the first Gradle named volume) with the verified Gradle
+# distribution without copying the application source into the image.
+COPY --chown=android:android gradlew /tmp/stream-gradle/gradlew
+COPY --chown=android:android gradle/wrapper/ /tmp/stream-gradle/gradle/wrapper/
+RUN setpriv --reuid=android --regid=android --init-groups \
+        bash -c 'cd /tmp/stream-gradle && chmod +x gradlew && ./gradlew --version' \
+    && rm -rf /tmp/stream-gradle
+
+COPY --chmod=0755 docker/docker-entrypoint.sh /usr/local/bin/stream-docker-entrypoint
+
+WORKDIR /workspace
+
+ENTRYPOINT ["/usr/local/bin/stream-docker-entrypoint"]
+CMD ["bash"]
