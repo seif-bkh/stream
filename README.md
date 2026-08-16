@@ -7,11 +7,12 @@ Stream is a frictionless Android brain-dump: launch, type, and leave. Capture is
 - Opens directly to a full-screen Capture editor with the keyboard requested immediately.
 - Stamps an entry only when its first text arrives, using `THU AUG 13 · 14:32:07` formatting.
 - Writes raw text to `filesDir/draft_buffer.txt` after a 275 ms debounce.
-- Upserts the entry into Room after 2 seconds idle and synchronously at `onStop()`, then removes the committed draft.
-- Restores a newer non-empty draft on process restart and labels it `recovered unsaved text`.
+- Upserts a non-blank entry into Room after 2 seconds idle and synchronously at `onStop()`, then removes the committed draft.
+- Never saves empty or whitespace-only notes; clearing an existing entry restores its previous saved text.
+- Restores a newer non-blank draft on process restart and labels it `recovered unsaved text`.
 - Swipes right to a reverse-chronological, day-grouped Log and left to Capture.
 - Reopens entries for editing without changing their original creation timestamp.
-- Moves entries into recoverable Trash, with confirmed permanent deletion only from Trash.
+- Moves entries into recoverable Trash, with confirmed per-entry deletion and a confirmed Empty Trash action.
 - Searches by content or jumps to an ISO date (`YYYY-MM-DD`).
 - Exports and merges timestamp-deduplicated JSON, including Trash state, through Android's document picker.
 - Provides a static **Capture** launcher shortcut (long-press the app icon).

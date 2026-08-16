@@ -32,4 +32,7 @@ interface EntryDao {
 
     @Query("DELETE FROM entries WHERE timestamp = :timestamp AND trashedAt IS NOT NULL")
     suspend fun deletePermanently(timestamp: Long): Int
+
+    @Query("DELETE FROM entries WHERE trashedAt IS NOT NULL")
+    suspend fun emptyTrash(): Int
 }

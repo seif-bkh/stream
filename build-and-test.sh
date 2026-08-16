@@ -407,7 +407,7 @@ Manual phone checks:
   3. Stop typing for two seconds; confirm the status changes to "saved".
   4. Swipe right to Log, verify/search the entry, then swipe left to Capture.
   5. Tap the entry, edit it, and confirm its original timestamp stays fixed.
-  6. Move an entry to Trash, restore it, and verify permanent delete confirmation.
+  6. Move entries to Trash; test restore, permanent delete, and confirmed Empty Trash.
   7. Long-press the launcher icon and try the Capture shortcut.
   8. Open Settings and test export/import with a disposable export file.
 

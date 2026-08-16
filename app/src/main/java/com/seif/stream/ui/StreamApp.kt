@@ -83,6 +83,9 @@ fun StreamApp(
             onDeletePermanently = { entry ->
                 scope.launch { logViewModel.deletePermanently(entry) }
             },
+            onEmptyTrash = {
+                scope.launch { logViewModel.emptyTrash() }
+            },
             modifier = Modifier.fillMaxSize(),
         )
 

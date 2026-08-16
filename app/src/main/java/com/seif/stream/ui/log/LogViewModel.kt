@@ -33,6 +33,8 @@ class LogViewModel(
     suspend fun deletePermanently(entry: Entry): Boolean =
         repository.deletePermanently(entry.timestamp)
 
+    suspend fun emptyTrash(): Int = repository.emptyTrash()
+
     class Factory(
         private val repository: StreamRepository,
     ) : ViewModelProvider.Factory {

@@ -20,6 +20,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.seif.stream.R
 import com.seif.stream.data.Entry
+import com.seif.stream.ui.theme.Accent
 import com.seif.stream.ui.theme.Ink
 import com.seif.stream.ui.theme.Muted
 import com.seif.stream.ui.theme.Paper
@@ -46,9 +48,11 @@ fun TrashScreen(
     onBack: () -> Unit,
     onRestore: (Entry) -> Unit,
     onDeletePermanently: (Entry) -> Unit,
+    onEmptyTrash: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var pendingPermanentDelete by remember { mutableStateOf<Entry?>(null) }
+    var pendingEmptyTrash by remember { mutableStateOf(false) }
     val today = LocalDate.now()
     val listItems = remember(entries, today) {
         buildLogItems(entries = entries, contentQuery = "", today = today)
@@ -67,13 +71,30 @@ fun TrashScreen(
         )
     }
 
+    if (pendingEmptyTrash) {
+        EntryConfirmationDialog(
+            title = "Empty trash?",
+            message = "Every entry in Trash will be permanently deleted. This cannot be undone.",
+            confirmLabel = "Empty trash",
+            onConfirm = {
+                pendingEmptyTrash = false
+                onEmptyTrash()
+            },
+            onDismiss = { pendingEmptyTrash = false },
+        )
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(Paper)
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        TrashHeader(onBack = onBack)
+        TrashHeader(
+            hasEntries = entries.isNotEmpty(),
+            onBack = onBack,
+            onEmptyTrash = { pendingEmptyTrash = true },
+        )
         Text(
             text = "Restore an entry or delete it permanently.",
             color = Muted,
@@ -131,12 +152,16 @@ fun TrashScreen(
 }
 
 @Composable
-private fun TrashHeader(onBack: () -> Unit) {
+private fun TrashHeader(
+    hasEntries: Boolean,
+    onBack: () -> Unit,
+    onEmptyTrash: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(58.dp)
-            .padding(start = 10.dp, end = 22.dp),
+            .padding(start = 10.dp, end = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onBack) {
@@ -153,7 +178,20 @@ private fun TrashHeader(onBack: () -> Unit) {
             fontWeight = FontWeight.Bold,
             fontSize = 12.sp,
             letterSpacing = 1.4.sp,
+            modifier = Modifier.weight(1f),
         )
+        TextButton(
+            onClick = onEmptyTrash,
+            enabled = hasEntries,
+        ) {
+            Text(
+                text = "EMPTY TRASH",
+                color = if (hasEntries) Accent else Muted.copy(alpha = 0.5f),
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
+                letterSpacing = 0.5.sp,
+            )
+        }
     }
 }
 

@@ -13,7 +13,10 @@ class StreamApplication : Application() {
             StreamDatabase::class.java,
             "stream_entries.db",
         )
-            .addMigrations(StreamDatabase.MIGRATION_1_2)
+            .addMigrations(
+                StreamDatabase.MIGRATION_1_2,
+                StreamDatabase.MIGRATION_2_3,
+            )
             .build()
     }
 

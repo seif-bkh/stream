@@ -33,9 +33,8 @@ class DraftStore(context: Context) {
         if (!draftFile.exists()) return null
 
         val text = runCatching { draftFile.readText(Charsets.UTF_8) }.getOrNull() ?: return null
-        if (text.isEmpty()) {
-            draftFile.delete()
-            preferences.edit().remove(KEY_FIRST_KEYSTROKE_MILLIS).commit()
+        if (text.isBlank()) {
+            discardBlank()
             return null
         }
 
@@ -62,6 +61,18 @@ class DraftStore(context: Context) {
             ?: nowMillis
 
         return RecoveredDraft(text = text, timestamp = recoveredTimestamp)
+    }
+
+    /** Removes scratch state only after verifying it contains no user-visible text. */
+    fun discardBlank() {
+        val text = if (draftFile.exists()) {
+            draftFile.readText(Charsets.UTF_8)
+        } else {
+            ""
+        }
+        check(text.isBlank()) { "Refusing to discard a non-blank draft" }
+        preferences.edit().remove(KEY_FIRST_KEYSTROKE_MILLIS).commit()
+        draftFile.delete()
     }
 
     /** Called only after the database upsert has completed successfully. */

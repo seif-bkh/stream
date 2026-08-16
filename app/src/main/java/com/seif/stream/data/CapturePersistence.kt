@@ -5,5 +5,7 @@ interface CapturePersistence {
 
     suspend fun writeDraft(text: String, timestamp: Long)
 
+    suspend fun discardBlankDraft(text: String, timestamp: Long)
+
     suspend fun commitCapture(text: String, timestamp: Long)
 }

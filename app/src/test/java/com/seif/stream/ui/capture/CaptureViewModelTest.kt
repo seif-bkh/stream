@@ -131,6 +131,55 @@ class CaptureViewModelTest {
         assertEquals("", viewModel.state.value.text)
         assertEquals(null, viewModel.state.value.timestamp)
     }
+
+    @Test
+    fun whitespaceOnlyNewCaptureIsDiscardedAfterIdle() = runTest {
+        val persistence = FakeCapturePersistence()
+        val viewModel = CaptureViewModel(persistence) { 400L }
+
+        viewModel.onTextChanged(" \n\t ")
+        runCurrent()
+        advanceTimeBy(2_000L)
+        runCurrent()
+
+        assertTrue(persistence.commits.isEmpty())
+        assertEquals(1, persistence.blankDiscards)
+        assertEquals("", viewModel.state.value.text)
+        assertEquals(null, viewModel.state.value.timestamp)
+        assertEquals(CaptureSaveStatus.Ready, viewModel.state.value.saveStatus)
+    }
+
+    @Test
+    fun clearingExistingEntryRestoresItsPreviousSavedText() = runTest {
+        val persistence = FakeCapturePersistence()
+        val viewModel = CaptureViewModel(persistence) { 999L }
+        val original = Entry(timestamp = 50L, text = "Keep me", updatedAt = 60L)
+        viewModel.openEntry(original)
+
+        viewModel.onTextChanged("\n\t")
+        runCurrent()
+        advanceTimeBy(2_000L)
+        runCurrent()
+
+        assertTrue(persistence.commits.isEmpty())
+        assertEquals(1, persistence.blankDiscards)
+        assertEquals("Keep me", viewModel.state.value.text)
+        assertEquals(50L, viewModel.state.value.timestamp)
+        assertEquals(CaptureSaveStatus.Saved, viewModel.state.value.saveStatus)
+    }
+
+    @Test
+    fun lifecycleStopNeverCommitsWhitespaceOnlyCapture() {
+        val persistence = FakeCapturePersistence()
+        val viewModel = CaptureViewModel(persistence) { 123L }
+        viewModel.onTextChanged("   ")
+
+        viewModel.flushOnStop()
+
+        assertTrue(persistence.commits.isEmpty())
+        assertEquals(1, persistence.blankDiscards)
+        assertEquals(null, viewModel.state.value.timestamp)
+    }
 }
 
 private class FakeCapturePersistence(
@@ -138,11 +187,17 @@ private class FakeCapturePersistence(
 ) : CapturePersistence {
     val draftWrites = mutableListOf<Pair<String, Long>>()
     val commits = mutableListOf<Pair<String, Long>>()
+    var blankDiscards = 0
 
     override fun recoverDraft(): RecoveredDraft? = recovered
 
     override suspend fun writeDraft(text: String, timestamp: Long) {
         draftWrites += text to timestamp
+    }
+
+    override suspend fun discardBlankDraft(text: String, timestamp: Long) {
+        check(text.isBlank())
+        blankDiscards += 1
     }
 
     override suspend fun commitCapture(text: String, timestamp: Long) {

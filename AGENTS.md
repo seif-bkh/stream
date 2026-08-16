@@ -32,14 +32,15 @@ Do not pick an interpretation silently. One clarifying question beats a wrong im
 - Never add a splash screen, onboarding, or a home screen. Launcher activity is Capture.
 - Never write to the DB on a keystroke.
 - Never stamp the timestamp at app open.
-- Never delete drafts unless a real save just committed them. Stored entries may only leave the Log through the confirmed recoverable Trash flow; permanent deletion is only available from Trash with a second confirmation.
+- Never delete a non-blank draft unless a real save just committed it. Whitespace-only scratch state is discarded without a DB write. Stored entries may only leave the Log through the confirmed recoverable Trash flow; permanent deletion is only available from Trash with confirmation.
 
 ## Always do these
 - Capture opens with focus in the field and keyboard shown, every time (launch, widget/shortcut, FAB).
 - Timestamp is stamped at the **first keystroke** of a new entry, fixed until real save, and renders exactly `THU AUG 13 · 14:32:07`.
 - Text change → debounce 250–300ms → write raw string to `filesDir/draft_buffer.txt` + save first-keystroke millis to prefs. Nothing else.
-- 2s idle **or** `onStop()` → commit draft to DB with the stamped timestamp → update `last_real_save_timestamp` → delete draft file + pref.
-- On every launch: if draft file is non-empty and its time > `last_real_save_timestamp`, restore text + original timestamp and show "recovered unsaved text". Otherwise delete the draft.
+- 2s idle **or** `onStop()` → commit a non-blank draft to DB with the stamped timestamp → update `last_real_save_timestamp` → delete draft file + pref.
+- Empty or whitespace-only drafts never reach Room. Discard new blank captures; if an existing entry is cleared, restore its previous saved text.
+- On every launch: if a draft file is non-blank and its time > `last_real_save_timestamp`, restore text + original timestamp and show "recovered unsaved text". Otherwise delete the blank or already-saved draft.
 - Swipe right = Capture → Log. Swipe left = Log → Capture. Never invert.
 - Opening a Log entry edits that same entry; keep its original first-keystroke timestamp through every later save.
 - Moving an active entry to Trash requires confirmation, remains recoverable, and resets Capture if that entry was open.
@@ -57,7 +58,7 @@ Do not pick an interpretation silently. One clarifying question beats a wrong im
 - The trash icon opens a `Move to trash` / `Cancel` confirmation; it never deletes immediately.
 - Search has two modes: substring filter, and jump-to-date that **scrolls to the divider** (not filters).
 - FAB bottom-right opens a fresh empty Capture. Trash and Settings buttons stay in the top corner.
-- Trash is minimal: restore directly, or permanently delete only after confirmation.
+- Trash is minimal: restore directly, permanently delete one entry after confirmation, or empty all Trash after a separate confirmation.
 
 ## Settings screen invariants
 - Exactly two actions: Export, Import. Add nothing else.
@@ -70,6 +71,8 @@ Do not pick an interpretation silently. One clarifying question beats a wrong im
 - [ ] Timestamp still fires on first keystroke, format unchanged
 - [ ] Draft write is still cheap (raw string, no parsing)
 - [ ] Real save still fires on 2s idle **and** `onStop()`
+- [ ] Empty and whitespace-only notes never reach Room
+- [ ] Clearing an existing entry restores its previous saved text
 - [ ] Recovery path still works if the app is killed mid-typing
 - [ ] Swipe right still opens Log and swipe left still returns to Capture
 - [ ] Reopened entries still save with their original timestamp

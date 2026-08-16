@@ -43,6 +43,35 @@ class PersistenceInstrumentedTest {
     }
 
     @Test
+    fun whitespaceOnlyDraftIsNeverRecovered() {
+        val store = DraftStore(context)
+        store.completeRealSave(System.currentTimeMillis())
+        store.writeRaw(" \n\t", System.currentTimeMillis())
+
+        assertNull(store.recoverIfNewerThanLastSave(System.currentTimeMillis()))
+        assertFalse(store.draftFileForTest().exists())
+    }
+
+    @Test
+    fun lifecycleBlankDiscardReplacesAnOlderNonBlankScratchRevision() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(context, StreamDatabase::class.java).build()
+        database = db
+        val store = DraftStore(context)
+        store.completeRealSave(System.currentTimeMillis())
+        store.writeRaw("Earlier draft revision", 10L)
+        val repository = StreamRepository(
+            entryDao = db.entryDao(),
+            draftStore = store,
+            nowMillis = { 20L },
+        )
+
+        repository.discardBlankDraft(" \n", timestamp = 10L)
+
+        assertFalse(store.draftFileForTest().exists())
+        assertTrue(db.entryDao().getAll().isEmpty())
+    }
+
+    @Test
     fun importSkipsAnExistingTimestampAndMergesTheRest() = runBlocking {
         val db = Room.inMemoryDatabaseBuilder(context, StreamDatabase::class.java).build()
         database = db
@@ -62,6 +91,7 @@ class PersistenceInstrumentedTest {
             entries = listOf(
                 Entry(timestamp = 100L, text = "Duplicate", updatedAt = 100L),
                 Entry(timestamp = 200L, text = "Imported", updatedAt = 200L),
+                Entry(timestamp = 300L, text = " \n\t", updatedAt = 300L),
             ),
             exportedAtMillis = 300L,
         )
@@ -104,7 +134,47 @@ class PersistenceInstrumentedTest {
     }
 
     @Test
-    fun migrationFromVersionOneKeepsExistingEntriesActive() = runBlocking {
+    fun emptyTrashDeletesOnlyTrashedEntries() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(context, StreamDatabase::class.java).build()
+        database = db
+        val repository = StreamRepository(
+            entryDao = db.entryDao(),
+            draftStore = DraftStore(context),
+            nowMillis = { 500L },
+        )
+        db.entryDao().upsert(Entry(timestamp = 100L, text = "Active", updatedAt = 100L))
+        db.entryDao().upsert(
+            Entry(timestamp = 200L, text = "Trash one", updatedAt = 200L, trashedAt = 300L),
+        )
+        db.entryDao().upsert(
+            Entry(timestamp = 201L, text = "Trash two", updatedAt = 201L, trashedAt = 301L),
+        )
+
+        assertEquals(2, repository.emptyTrash())
+
+        val remaining = db.entryDao().getAll().single()
+        assertEquals("Active", remaining.text)
+        assertNull(remaining.trashedAt)
+    }
+
+    @Test
+    fun repositoryRejectsBlankDatabaseCommits() = runBlocking {
+        val db = Room.inMemoryDatabaseBuilder(context, StreamDatabase::class.java).build()
+        database = db
+        val repository = StreamRepository(
+            entryDao = db.entryDao(),
+            draftStore = DraftStore(context),
+            nowMillis = { 500L },
+        )
+
+        val result = runCatching { repository.commitCapture(" \n\t", timestamp = 100L) }
+
+        assertTrue(result.isFailure)
+        assertTrue(db.entryDao().getAll().isEmpty())
+    }
+
+    @Test
+    fun migrationsKeepRealEntriesAndRemoveLegacyBlankRows() = runBlocking {
         val databaseName = "stream-migration-${System.nanoTime()}.db"
         databaseNameToDelete = databaseName
         val databaseFile = context.getDatabasePath(databaseName)
@@ -123,11 +193,17 @@ class PersistenceInstrumentedTest {
             legacyDatabase.execSQL(
                 "INSERT INTO entries(timestamp, text, updatedAt) VALUES(100, 'Existing', 100)",
             )
+            legacyDatabase.execSQL(
+                "INSERT INTO entries(timestamp, text, updatedAt) VALUES(101, char(32) || char(9) || char(10), 101)",
+            )
             legacyDatabase.version = 1
         }
 
         val migrated = Room.databaseBuilder(context, StreamDatabase::class.java, databaseName)
-            .addMigrations(StreamDatabase.MIGRATION_1_2)
+            .addMigrations(
+                StreamDatabase.MIGRATION_1_2,
+                StreamDatabase.MIGRATION_2_3,
+            )
             .build()
         database = migrated
 

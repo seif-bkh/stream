@@ -53,6 +53,7 @@ class CaptureViewModel(
     )
     val state: kotlinx.coroutines.flow.StateFlow<CaptureUiState> = _state
 
+    private var lastCommittedText: String? = null
     private var revision = 0L
     private var draftJob: Job? = null
     private var realSaveJob: Job? = null
@@ -112,13 +113,21 @@ class CaptureViewModel(
             if (revision != snapshotRevision) return@launch
 
             try {
-                repository.commitCapture(snapshot.text, timestamp)
-                if (revision == snapshotRevision) {
-                    _state.value = _state.value.copy(
-                        saveStatus = CaptureSaveStatus.Saved,
-                        recovered = false,
-                        dirty = false,
-                    )
+                if (snapshot.text.isBlank()) {
+                    repository.discardBlankDraft(snapshot.text, timestamp)
+                    if (revision == snapshotRevision) {
+                        restoreAfterBlank(snapshot)
+                    }
+                } else {
+                    repository.commitCapture(snapshot.text, timestamp)
+                    lastCommittedText = snapshot.text
+                    if (revision == snapshotRevision) {
+                        _state.value = _state.value.copy(
+                            saveStatus = CaptureSaveStatus.Saved,
+                            recovered = false,
+                            dirty = false,
+                        )
+                    }
                 }
             } catch (cancellation: CancellationException) {
                 throw cancellation
@@ -131,6 +140,20 @@ class CaptureViewModel(
     private fun markNotSavedIfCurrent(snapshotRevision: Long) {
         if (revision == snapshotRevision) {
             _state.value = _state.value.copy(saveStatus = CaptureSaveStatus.NotSaved)
+        }
+    }
+
+    private fun restoreAfterBlank(snapshot: CaptureUiState) {
+        val previousText = lastCommittedText
+        _state.value = if (previousText != null && snapshot.timestamp != null) {
+            CaptureUiState(
+                text = previousText,
+                timestamp = snapshot.timestamp,
+                saveStatus = CaptureSaveStatus.Saved,
+                sessionId = snapshot.sessionId + 1L,
+            )
+        } else {
+            CaptureUiState(sessionId = snapshot.sessionId + 1L)
         }
     }
 
@@ -148,15 +171,24 @@ class CaptureViewModel(
         val snapshotRevision = revision
         runCatching {
             runBlocking {
-                repository.commitCapture(snapshot.text, timestamp)
+                if (snapshot.text.isBlank()) {
+                    repository.discardBlankDraft(snapshot.text, timestamp)
+                } else {
+                    repository.commitCapture(snapshot.text, timestamp)
+                }
             }
         }.onSuccess {
             if (revision == snapshotRevision) {
-                _state.value = _state.value.copy(
-                    saveStatus = CaptureSaveStatus.Saved,
-                    recovered = false,
-                    dirty = false,
-                )
+                if (snapshot.text.isBlank()) {
+                    restoreAfterBlank(snapshot)
+                } else {
+                    lastCommittedText = snapshot.text
+                    _state.value = _state.value.copy(
+                        saveStatus = CaptureSaveStatus.Saved,
+                        recovered = false,
+                        dirty = false,
+                    )
+                }
             }
         }.onFailure {
             markNotSavedIfCurrent(snapshotRevision)
@@ -168,6 +200,7 @@ class CaptureViewModel(
         val snapshot = _state.value
         if (!prepareToReplace(snapshot)) return false
 
+        lastCommittedText = null
         _state.value = CaptureUiState(sessionId = snapshot.sessionId + 1L)
         return true
     }
@@ -179,11 +212,13 @@ class CaptureViewModel(
 
         if (snapshot.timestamp == entry.timestamp) {
             // Keep newer in-memory text if the user returns before its debounce has completed.
+            if (lastCommittedText == null) lastCommittedText = entry.text
             _state.value = snapshot.copy(sessionId = snapshot.sessionId + 1L)
             return true
         }
 
         if (!prepareToReplace(snapshot)) return false
+        lastCommittedText = entry.text
         _state.value = CaptureUiState(
             text = entry.text,
             timestamp = entry.timestamp,
@@ -202,6 +237,7 @@ class CaptureViewModel(
         if (snapshot.timestamp != timestamp) return true
         if (!prepareToReplace(snapshot)) return false
 
+        lastCommittedText = null
         _state.value = CaptureUiState(sessionId = snapshot.sessionId + 1L)
         return true
     }
@@ -213,7 +249,12 @@ class CaptureViewModel(
 
         if (snapshot.dirty && snapshot.timestamp != null) {
             try {
-                repository.commitCapture(snapshot.text, snapshot.timestamp)
+                if (snapshot.text.isBlank()) {
+                    repository.discardBlankDraft(snapshot.text, snapshot.timestamp)
+                } else {
+                    repository.commitCapture(snapshot.text, snapshot.timestamp)
+                    lastCommittedText = snapshot.text
+                }
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (_: Throwable) {
